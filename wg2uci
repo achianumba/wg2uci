@@ -25,6 +25,7 @@ PEER_DESCRIPTION=''
 INTERFACE_NAME=''
 PEER_NAME=''
 PEER_NETWORK=''
+PEER_COUNT=0
 
 while IFS='=' read -r key value || [ -n "$key" ]; do
   # Strip whitespace
@@ -45,7 +46,7 @@ while IFS='=' read -r key value || [ -n "$key" ]; do
       CURRENT_SECTION='Interface'
 
       if [ -n "$INTERFACE_NAME" ]; then
-        SCRIPT="$SCRIPT\nuci set network.$INTERFACE_NAME=interface"
+        SCRIPT="$SCRIPT\nuci -q delete network.$INTERFACE_NAME\nuci set network.$INTERFACE_NAME=interface"
       else
         INTERFACE_NAME="${INI_FILENAME%.conf}"
         SCRIPT="$SCRIPT\nuci set network.$INTERFACE_NAME=interface"
@@ -64,8 +65,13 @@ while IFS='=' read -r key value || [ -n "$key" ]; do
       CURRENT_SECTION='Peer'
       PEER_NAME="wirguard_$INTERFACE_NAME"
       # shellcheck disable=SC1087
-      PEER_NETWORK="set network.@$PEER_NAME[-1]"
-      SCRIPT="$SCRIPT\n\n# Configure a WireGuard peer\nuci add network $PEER_NAME\nuci $PEER_NETWORK.description='$PEER_DESCRIPTION'"
+      PEER_NETWORK="set network.$PEER_NAME"
+      PEER_COUNT=$((PEER_COUNT+1))
+
+      SCRIPT="$SCRIPT\n\n# Configure a WireGuard peer"
+      [ "$PEER_COUNT" = "1" ] && SCRIPT="$SCRIPT\nuci -q delete network.$PEER_NAME"
+      
+      SCRIPT="$SCRIPT\nuci set network.$PEER_NAME='$INTERFACE_NAME'\nuci $PEER_NETWORK.description='$PEER_DESCRIPTION'"
       continue
       ;;
   esac
@@ -78,7 +84,7 @@ while IFS='=' read -r key value || [ -n "$key" ]; do
         ;;
 
       Address)
-        SCRIPT="$SCRIPT\nuci set network.$INTERFACE_NAME.addresses='$value'"
+        SCRIPT="$SCRIPT\nuci add_list network.$INTERFACE_NAME.addresses='$value'"
         ;;
 
       DNS)
@@ -108,7 +114,7 @@ while IFS='=' read -r key value || [ -n "$key" ]; do
         ;;
       
       AllowedIPs)
-        SCRIPT="$SCRIPT\nuci $PEER_NETWORK.allowed_ips='$(echo "$value" | tr ',' ' ')'"
+        SCRIPT="$SCRIPT\nuci add_list network.$PEER_NAME.allowed_ips='$(echo "$value" | tr ',' ' ')'"
         ;;
 
       PresharedKey)
@@ -117,6 +123,8 @@ while IFS='=' read -r key value || [ -n "$key" ]; do
     esac
   fi
 done < "$INI_FILEPATH"
+
+SCRIPT="$SCRIPT\n\n# Add interface to WAN (public) firewall zone\nuci del_list firewall.@zone[1].network='$INTERFACE_NAME'\nuci add_list firewall.@zone[1].network='$INTERFACE_NAME'\nuci commit firewall"
 
 SCRIPT="$SCRIPT\n\n# Commit network changes\nuci commit network\n\n# Restart the network and firewall\n/etc/init.d/network restart\n/etc/init.d/firewall restart"
 
