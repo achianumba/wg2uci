@@ -74,7 +74,7 @@ while IFS='=' read -r key value || [ -n "$key" ]; do
   if [ "$CURRENT_SECTION" = "Interface" ]; then
     case "$key" in
       PrivateKey)
-        SCRIPT="$SCRIPT\nuci set network.$INTERFACE_NAME.private_key='$value'"
+        SCRIPT="$SCRIPT\nuci set network.$INTERFACE_NAME.private_key='$value='"
         ;;
 
       Address)
@@ -95,7 +95,7 @@ while IFS='=' read -r key value || [ -n "$key" ]; do
   if [ "$CURRENT_SECTION" = "Peer" ]; then
     case "$key" in
       PublicKey)
-        SCRIPT="$SCRIPT\nuci $PEER_NETWORK.public_key='$value'"
+        SCRIPT="$SCRIPT\nuci $PEER_NETWORK.public_key='$value='"
         ;;
 
       Endpoint)
