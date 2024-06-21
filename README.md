@@ -1,0 +1,3 @@
+- Place the `# InterfaceName = foo0` comment before the `[Interface]` header
+- Place the `# Description = bar0` comment before each `[Peer]` header
+- The `*.conf` file's basename (not including the `.conf` extension) must be a valid Linux interface name if the `#InterfaceName` comment isn't specified.
