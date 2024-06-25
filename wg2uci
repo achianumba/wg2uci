@@ -3,15 +3,15 @@
 INI_FILEPATH=$1
 INI_FILENAME="$(basename "$INI_FILEPATH")"
 
-ZONE_SET='uci set firewall.@zone[-1]'
-ZONE_NAME='wan'
-ZONE_NETWORK=''
+ZONE='wan'
+ZONE_INDEX=1
 ZONE_INPUT='ACCEPT'
 ZONE_FORWARD='ACCEPT'
 ZONE_OUTPUT='ACCEPT'
 ZONE_MASQ=0
+ZONE_SET='uci set firewall.@zone[-1]'
 
-ARGS="$(getopt -o "z:n:N:i:f:o:m" -l "zone:,zone-name:,zone-input:,zone-forward:,zone-output:,zone-masq" -n "$0" -- "$@")"
+ARGS="$(getopt -o "z:i:f:o:m" -l "zone:,zone-input:,zone-forward:,zone-output:,zone-masq" -n "$0" -- "$@")"
 
 # Prevent 'unbound variable' error
 eval set -- "$ARGS"
@@ -20,17 +20,6 @@ while true; do
   case "$1" in
     -z | --zone)
       ZONE="$2"
-      shift 2
-      ;;
-    
-    -n | --zone-name)
-      ZONE_NAME="$2"
-      shift 2
-      continue
-      ;;
-    
-    -N | --zone-network)
-      ZONE_NETWORK="$2"
       shift 2
       continue
       ;;
@@ -64,7 +53,6 @@ while true; do
       ;;
   esac
 done
-
 
 SCRIPT=$(cat << SCRIPT
 #!/bin/sh
@@ -136,8 +124,6 @@ while IFS='=' read -r key value || [ -n "$key" ]; do
 
       if [ "$CURRENT_SECTION" = "Interface" ]; then
         SCRIPT="$SCRIPT\necho 'Committing $INTERFACE_NAME WireGuard interface to the network...'\nuci commit network"
-
-        SCRIPT="$SCRIPT\n\n#Add interface to WAN (public) firewall zone\necho Adding $INTERFACE_NAME to the WAN zone...\nuci del_list firewall.@zone[$ZONE_].network='$INTERFACE_NAME'\nuci add_list firewall.@zone[1].network='$INTERFACE_NAME'\nuci commit firewall"
       fi
 
       CURRENT_SECTION='Peer'
@@ -213,9 +199,17 @@ while IFS='=' read -r key value || [ -n "$key" ]; do
   fi
 done < "$INI_FILEPATH"
 
-SCRIPT="$SCRIPT\n\nuci commit network"
+SCRIPT="$SCRIPT\n\nuci commit network\n\necho 'Adding $INTERFACE_NAME to the $ZONE zone...'"
 
-SCRIPT="$SCRIPT\n\n# Reload the network and firewall\necho Reloading the firewall...\n/etc/init.d/firewall reload\n\necho Reloading the network...\n/etc/init.d/network reload"
+if [ "$ZONE" = "wan" ] || [ "$ZONE" = "lan" ]; then
+  [ "$ZONE" = "lan" ] && ZONE_INDEX=0
+
+  SCRIPT="$SCRIPT\nuci del_list firewall.@zone[$ZONE_INDEX].network='$INTERFACE_NAME'\nuci add_list firewall.@zone[$ZONE_INDEX].network='$INTERFACE_NAME'\nuci commit firewall"
+else
+  SCRIPT="$SCRIPT\nuci add firewall zone\n$ZONE_SET.name='$ZONE'\n$ZONE_SET.input='$ZONE_INPUT'\n$ZONE_SET.forward='$ZONE_FORWARD'\n$ZONE_SET.output='$ZONE_OUTPUT'\nuci add_list firewall.@zone[-1].network='$INTERFACE_NAME'\n$ZONE_SET.masq='$ZONE_MASQ'"
+fi
+
+SCRIPT="$SCRIPT\n\n\necho Reloading the firewall...\n/etc/init.d/firewall reload\n\necho Reloading the network...\n/etc/init.d/network reload"
 
 # Write script to file
 SCRIPT_NAME="config-$INTERFACE_NAME.sh"
