@@ -56,3 +56,7 @@ Configure a WireGuard interface/network using the generated script
 - Doesn't parse `PostUp` and `PostDown` directives.
 - Doesn't handle multiple AllowedIPs when written on multiple lines (yet) instead of as a comma-separated list.
 - The generate script doesn't add the interface to a firewall zone.
+
+## To-do
+
+- [ ] Set wan, lan, custom firewall zone using the `-z | --zone` option
